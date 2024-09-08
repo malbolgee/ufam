@@ -1,0 +1,12 @@
+filegroup {
+    name: "framework-ufam-security-sources",
+    srcs: [
+        "java/**/*.java",
+        "java/**/*.aidl",
+    ],
+    path: "java",
+    visibility: [
+        "//frameworks/base:__subpackages__",
+        "//ufam/packages/modules/ufam:__subpackages__"
+    ],
+}

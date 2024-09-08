@@ -1,0 +1,20 @@
+// Signature format: 2.0
+package com.ufam.android.security {
+
+  public final class UfamSecurity {
+    ctor public UfamSecurity(android.content.Context);
+    method public void closeAllBut(int[]) throws com.ufam.android.security.exceptions.ApiUnavailableException;
+    method public int[] getAllOpenDoors() throws com.ufam.android.security.exceptions.ApiUnavailableException;
+  }
+
+}
+
+package com.ufam.android.security.exceptions {
+
+  public class ApiUnavailableException extends java.lang.Exception {
+    ctor public ApiUnavailableException(String);
+    ctor public ApiUnavailableException(String, Throwable);
+  }
+
+}
+

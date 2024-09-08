@@ -1,0 +1,190 @@
+diff --git a/server/Android.bp b/server/Android.bp
+index a08afd9dc29c56c60294fc7823434b0eaa630b7a..6b8ff590c23e99b7de0685e09023686428a9a5db 100644
+--- a/server/Android.bp
++++ b/server/Android.bp
+@@ -64,6 +64,7 @@ cc_library_static {
+         "UidRanges.cpp",
+         "WakeupController.cpp",
+         "XfrmController.cpp",
++        "OemNetdController.cpp",
+     ],
+     shared_libs: [
+         "libbase",
+diff --git a/server/Controllers.h b/server/Controllers.h
+index 8b51ddf12959d40c74126643eb04eef1b8b8be51..997177974e2d7d5a1e3c4165981d519248ba5af7 100644
+--- a/server/Controllers.h
++++ b/server/Controllers.h
+@@ -31,6 +31,7 @@
+ #include "WakeupController.h"
+ #include "XfrmController.h"
+ #include "netdutils/Log.h"
++#include "OemNetdController.h"
+ 
+ namespace android {
+ namespace net {
+@@ -51,6 +52,7 @@ class Controllers {
+     WakeupController wakeupCtrl;
+     XfrmController xfrmCtrl;
+     TcpSocketMonitor tcpSocketMonitor;
++    OemNetdController oemCtrl;
+ 
+     void init();
+ 
+diff --git a/server/OemNetdConstants.h b/server/OemNetdConstants.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..5ce8f700e525b37081375c11ef37142480026be7
+--- /dev/null
++++ b/server/OemNetdConstants.h
+@@ -0,0 +1,3 @@
++#pragma once
++
++#define UFAM_SECURITY_CHAIN "ufam_security_chain"
+diff --git a/server/OemNetdController.cpp b/server/OemNetdController.cpp
+new file mode 100644
+index 0000000000000000000000000000000000000000..e383374335232b5b9610c7751a4c86a34e3bd6e2
+--- /dev/null
++++ b/server/OemNetdController.cpp
+@@ -0,0 +1,46 @@
++#include <errno.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include "NetdConstants.h"
++#include "OemNetdConstants.h"
++#include "Controllers.h"
++#include "OemNetdController.h"
++#include <android-base/strings.h>
++#include <android-base/stringprintf.h>
++#include <android-base/properties.h>
++#include <oem_iptables_hook.h>
++
++#include "log/log.h"
++#include "RouteController.h"
++
++namespace android {
++namespace net {
++
++using android::base::StringAppendF;
++
++void OemNetdController::closeAllBut(const std::vector<int>& exceptions) {
++    std::string command = "*filter\n";
++
++    int result = 0;
++
++    StringAppendF(&command, "-F %s\n", UFAM_SECURITY_CHAIN);
++
++    if (exceptions.size() > 0) {
++        StringAppendF(&command, "-A %s -m state --state ESTABLISHED,RELATED -j ACCEPT\n", UFAM_SECURITY_CHAIN);
++
++        for (const int port : exceptions) {
++            StringAppendF(&command, "-A %s -p tcp --dport %d -m state --state NEW -j ACCEPT\n", UFAM_SECURITY_CHAIN, port);
++        }
++
++        StringAppendF(&command, "-A %s -p tcp -j DROP\n", UFAM_SECURITY_CHAIN);
++    }
++
++    StringAppendF(&command, "COMMIT\n");
++    ALOGD("[UFAM_SECURITY] createdUFAMSecurityChainRules. command: %s", command.c_str());
++    result |= execIptablesRestore(V4V6, command);
++    ALOGD("[UFAM_SECURITY] result = %d", result);
++}
++
++}  // namespace net
++}  // namespace android
+diff --git a/server/OemNetdController.h b/server/OemNetdController.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..d9c49a6a5d9497c8dc35f91ffc7caea8d6a0f347
+--- /dev/null
++++ b/server/OemNetdController.h
+@@ -0,0 +1,18 @@
++#ifndef _OEM_NETD_CONTROLLER_H__
++#define _OEM_NETD_CONTROLLER_H__
++
++namespace android {
++namespace net {
++
++class OemNetdController {
++
++public:
++    void closeAllBut(const std::vector<int>& exceptions);
++
++};
++
++
++}  // namespace net
++}  // namespace android
++
++#endif
+diff --git a/server/OemNetdListener.cpp b/server/OemNetdListener.cpp
+index 9c44cf234a7b13b2c8f127bdfba13dec47ccf1a6..362fee89763f4f957525cb616876b9efec72a04a 100644
+--- a/server/OemNetdListener.cpp
++++ b/server/OemNetdListener.cpp
+@@ -17,6 +17,10 @@
+ #define LOG_TAG "OemNetd"
+ 
+ #include "OemNetdListener.h"
++#include "Controllers.h"
++
++using android::net::gCtls;
++
+ 
+ namespace com {
+ namespace android {
+@@ -35,6 +39,11 @@ namespace net {
+     return ::android::binder::Status::ok();
+ }
+ 
++::android::binder::Status OemNetdListener::closeAllBut(const std::vector<int>& exceptions) {
++    gCtls->oemCtrl.closeAllBut(exceptions);
++    return ::android::binder::Status::ok();
++}
++
+ ::android::binder::Status OemNetdListener::registerOemUnsolicitedEventListener(
+         const ::android::sp<IOemNetdUnsolicitedEventListener>& listener) {
+     registerOemUnsolicitedEventListenerInternal(listener);
+diff --git a/server/OemNetdListener.h b/server/OemNetdListener.h
+index b94827b3780fa6a0f52ec096e4552b19f6543e30..b0003e71bc039465c1f9030b9c16f59f8df06566 100644
+--- a/server/OemNetdListener.h
++++ b/server/OemNetdListener.h
+@@ -42,6 +42,8 @@ class OemNetdListener : public BnOemNetd {
+     ::android::binder::Status registerOemUnsolicitedEventListener(
+             const ::android::sp<IOemNetdUnsolicitedEventListener>& listener) override;
+ 
++    ::android::binder::Status closeAllBut(const std::vector<int>& exceptions) override;
++
+   private:
+     std::mutex mOemUnsolicitedMutex;
+ 
+diff --git a/server/StrictController.cpp b/server/StrictController.cpp
+index 855bedbd8048af5c87d5392afdda8158aa3e4e74..555f45f27d7fbdd9a3d4f3af54e2dab85932ec24 100644
+--- a/server/StrictController.cpp
++++ b/server/StrictController.cpp
+@@ -31,6 +31,7 @@
+ 
+ #include "ConnmarkFlags.h"
+ #include "NetdConstants.h"
++#include "OemNetdConstants.h"
+ #include "StrictController.h"
+ 
+ auto StrictController::execIptablesRestore = ::execIptablesRestore;
+@@ -72,6 +73,9 @@ int StrictController::setupIptablesHooks(void) {
+ 
+     CMD_V4V6("*filter");
+ 
++    CMD_V4V6("-N %s", UFAM_SECURITY_CHAIN);
++    CMD_V4V6("-A INPUT -j %s", UFAM_SECURITY_CHAIN);
++
+     // Chain triggered when cleartext socket detected and penalty is log
+     CMD_V4V6("-A %s -j CONNMARK --or-mark %s", LOCAL_PENALTY_LOG, connmarkFlagAccept);
+     CMD_V4V6("-A %s -j NFLOG --nflog-group 0", LOCAL_PENALTY_LOG);
+diff --git a/server/binder/com/android/internal/net/IOemNetd.aidl b/server/binder/com/android/internal/net/IOemNetd.aidl
+index bd55106de1a47944216afcb8b165a49b9a5b7135..abfe924dd92074f12628da6c2e3c4155938145ec 100644
+--- a/server/binder/com/android/internal/net/IOemNetd.aidl
++++ b/server/binder/com/android/internal/net/IOemNetd.aidl
+@@ -31,4 +31,6 @@ interface IOemNetd {
+     * @param listener oem unsolicited event listener to register
+     */
+     void registerOemUnsolicitedEventListener(IOemNetdUnsolicitedEventListener listener);
++
++    oneway void closeAllBut(in int[] exceptions);
+ }

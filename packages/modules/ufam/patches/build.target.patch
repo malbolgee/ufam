@@ -1,0 +1,12 @@
+diff --git a/target/product/generic_system.mk b/target/product/generic_system.mk
+index 98d60468543bceb59de54e27a93c538e6af13d36..22f6b1ff9893e44c0c27a2639c2fd6ebb7af1f85 100644
+--- a/target/product/generic_system.mk
++++ b/target/product/generic_system.mk
+@@ -35,6 +35,7 @@ PRODUCT_PACKAGES += \
+     preinstalled-packages-platform-generic-system.xml \
+     Stk \
+     Tag \
++    ufam-security-sdk \
+ 
+ # OTA support
+ PRODUCT_PACKAGES += \

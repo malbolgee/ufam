@@ -1,0 +1,19 @@
+java_library {
+    name: "services.ufam.security",
+    defaults: [
+        "platform_service_defaults",
+        "services_java_defaults",
+    ],
+    srcs: [
+        ":services.ufam.security-sources",
+    ],
+    libs: [
+        "androidx.annotation_annotation",
+        "framework-annotations-lib",
+        "framework",
+        "services.core",
+    ],
+    optimize: {
+        proguard_flags_files: ["proguard.flags"],
+    },
+}

@@ -1,0 +1,6 @@
+filegroup {
+    name: "services.ufam.security-sources",
+    srcs: [
+        "java/**/*.java",
+    ],
+}

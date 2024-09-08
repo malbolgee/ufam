@@ -1,0 +1,97 @@
+java_sdk_library {
+    name: "ufam-security-sdk",
+
+    srcs: [
+        ":ufam-security-sdk-sources",
+    ],
+
+    api_packages: [
+        "com.ufam.android.security",
+        "com.ufam.android.security.exceptions",
+    ],
+
+    required: [
+        "ufam-security-sdk-etc-feature-files"
+    ]
+}
+
+filegroup {
+    name: "ufam-security-sdk-sources",
+    srcs: [
+        "src/java/**/*.java",
+        "src/java/**/*.aidl",
+    ],
+    path: "src/java",
+}
+
+filegroup {
+    name: "ufam-security-sdk.api.public.latest",
+    srcs: [
+        "api/current.txt",
+    ],
+}
+
+filegroup {
+    name: "ufam-security-sdk-removed.api.public.latest",
+    srcs: [
+        "api/removed.txt",
+    ],
+}
+
+filegroup {
+    name: "ufam-security-sdk-incompatibilities.api.public.latest",
+    srcs: [
+        "api/incompatibilities.txt",
+    ],
+}
+
+filegroup {
+    name: "ufam-security-sdk.api.system.latest",
+    srcs: [
+        "api/system-current.txt",
+    ],
+}
+
+filegroup {
+    name: "ufam-security-sdk-removed.api.system.latest",
+    srcs: [
+        "api/system-removed.txt",
+    ],
+}
+
+filegroup {
+    name: "ufam-security-sdk-incompatibilities.api.system.latest",
+    srcs: [
+        "api/system-incompatibilities.txt",
+    ],
+}
+
+prebuilt_etc {
+    name: "ufam-security-sdk-etc-feature-files",
+    sub_dir: "permissions",
+    src: "com.ufam.security.xml",
+    filename_from_src: true,
+}
+
+ufam_security_sdk_docs_only_args = " -hide 101 -hide 111 -hide 113 -hide 125 -hide 126 -hide 127 -hide 128 "
+
+droidstubs_host {
+    name: "ufam-security-sdk-doc-stubs",
+    srcs: [
+        "src/java/**/*.java",
+    ],
+    args: ufam_security_sdk_docs_only_args + "--package",
+    create_doc_stubs: true,
+}
+
+droiddoc_host {
+    name: "ufam-security-sdk-docs",
+    srcs: [
+        ":ufam-security-sdk-doc-stubs"
+    ],
+    custom_template: "droiddoc-templates-sdk",
+    args: ufam_security_sdk_docs_only_args +
+          "-werror " +
+          "-package " +
+          "-devsite ",
+}

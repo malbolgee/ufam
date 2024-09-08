@@ -1,0 +1,12 @@
+diff --git a/scripts/check_boot_jars/package_allowed_list.txt b/scripts/check_boot_jars/package_allowed_list.txt
+index 869fd3f8349de565d2fc79f2e74f258e0760d2e3..4c926bb3051899e8d9e8fca0bdf0293b675da722 100644
+--- a/scripts/check_boot_jars/package_allowed_list.txt
++++ b/scripts/check_boot_jars/package_allowed_list.txt
+@@ -254,3 +254,6 @@ com\.google\.i18n\.phonenumbers
+ # Packages used for Android in Chrome OS
+ org\.chromium\.arc
+ org\.chromium\.arc\..*
++
++# Include UFAM packages
++com\.ufam\..*
+\ No newline at end of file

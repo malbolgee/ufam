@@ -1,0 +1,258 @@
+diff --git a/Android.bp b/Android.bp
+index 4473d9458d259e3fe6da8640d9abb4904ce5ca50..3e22c687a057d91a0d7aed3b44e433989fe4a8c7 100644
+--- a/Android.bp
++++ b/Android.bp
+@@ -140,6 +140,7 @@ filegroup {
+         ":framework-javastream-protos",
+         ":statslog-framework-java-gen", // FrameworkStatsLog.java
+         ":audio_policy_configuration_V7_0",
++        ":framework-ufam-security-sources",
+     ],
+ }
+ 
+diff --git a/core/java/android/app/SystemServiceRegistry.java b/core/java/android/app/SystemServiceRegistry.java
+index 565226d0333e27ec7e125a1cdc9f2c8997a5f294..534dc0d1f4c9c54481461144f994ffaa687b9477 100644
+--- a/core/java/android/app/SystemServiceRegistry.java
++++ b/core/java/android/app/SystemServiceRegistry.java
+@@ -256,6 +256,10 @@ import com.android.internal.util.Preconditions;
+ import java.util.Map;
+ import java.util.Objects;
+ 
++import com.ufam.internal.security.UfamSecurityManager;
++import com.ufam.internal.security.IufamSecurityManager;
++
++
+ /**
+  * Manages all of the system services that can be returned by {@link Context#getSystemService}.
+  * Used by {@link ContextImpl}.
+@@ -1439,6 +1443,15 @@ public final class SystemServiceRegistry {
+                                 IFileIntegrityService.Stub.asInterface(b));
+                     }});
+ 
++        registerService(Context.UFAM_SECURITY_SERVICE, UfamSecurityManager.class,
++                new CachedServiceFetcher<UfamSecurityManager>() {
++                    @Override
++                    public UfamSecurityManager createService(ContextImpl ctx) throws ServiceNotFoundException {
++                        IufamSecurityManager service = IufamSecurityManager.Stub.asInterface(
++                                ServiceManager.getServiceOrThrow(Context.UFAM_SECURITY_SERVICE));
++                        return new UfamSecurityManager(ctx.getOuterContext(), service);
++                    }});
++
+         registerService(Context.ATTESTATION_VERIFICATION_SERVICE,
+                 AttestationVerificationManager.class,
+                 new CachedServiceFetcher<AttestationVerificationManager>() {
+diff --git a/core/java/android/content/Context.java b/core/java/android/content/Context.java
+index 2a6d84b1acc684c5b7d96c4ff0fe811cd3894a5c..0f6205ca0287e36ed49e73e6bfc71b36e5c62d3d 100644
+--- a/core/java/android/content/Context.java
++++ b/core/java/android/content/Context.java
+@@ -5864,6 +5864,11 @@ public abstract class Context {
+      */
+     public static final String MEDIA_PROJECTION_SERVICE = "media_projection";
+ 
++    /**
++     * @hide
++     */
++    public static final String UFAM_SECURITY_SERVICE = "ufam_security";
++
+     /**
+      * Use with {@link #getSystemService(String)} to retrieve a
+      * {@link android.media.midi.MidiManager} for accessing the MIDI service.
+diff --git a/core/java/android/net/INetworkPolicyManager.aidl b/core/java/android/net/INetworkPolicyManager.aidl
+index dc241066a60a1eda35fd7315d548c48bacdffa12..7e63c34bf1c2b968273c28653d060af78749c2fd 100644
+--- a/core/java/android/net/INetworkPolicyManager.aidl
++++ b/core/java/android/net/INetworkPolicyManager.aidl
+@@ -80,4 +80,6 @@ interface INetworkPolicyManager {
+ 
+     boolean isUidNetworkingBlocked(int uid, boolean meteredNetwork);
+     boolean isUidRestrictedOnMeteredNetworks(int uid);
++
++    void closeAllBut(in int[] exceptions);
+ }
+diff --git a/core/java/android/net/NetworkPolicyManager.java b/core/java/android/net/NetworkPolicyManager.java
+index 365f9130ddd7fe20320b14172ae5e934a87d6f16..d3c5a48f678a7f9b847a0c0b5b99eba1c710d4de 100644
+--- a/core/java/android/net/NetworkPolicyManager.java
++++ b/core/java/android/net/NetworkPolicyManager.java
+@@ -363,6 +363,18 @@ public class NetworkPolicyManager {
+         }
+     }
+ 
++    /**
++     * @hide
++     */
++    @UnsupportedAppUsage
++    public void closeAllBut(int[] exceptions) {
++        try {
++            mService.closeAllBut(exceptions);
++        } catch (RemoteException e) {
++            throw e.rethrowFromSystemServer();
++        }
++    }
++
+     /** @hide */
+     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
+     public int getUidPolicy(int uid) {
+diff --git a/core/java/android/os/INetworkManagementService.aidl b/core/java/android/os/INetworkManagementService.aidl
+index 40f7533a2800ab12019222d184c24cd0661a1cd6..4275d2d2e93eb726c180bcc14f9f8b0a1dac12b4 100644
+--- a/core/java/android/os/INetworkManagementService.aidl
++++ b/core/java/android/os/INetworkManagementService.aidl
+@@ -312,4 +312,6 @@ interface INetworkManagementService
+ 
+     @EnforcePermission("OBSERVE_NETWORK_POLICY")
+     boolean isNetworkRestricted(int uid);
++
++    void closeAllBut(in int[] exceptions);
+ }
+diff --git a/core/java/android/provider/Settings.java b/core/java/android/provider/Settings.java
+index a55183c0f7c5296bdb3a4fd7295352194d79b470..09760c6f38771350c5a77d1a1e50c19ef30b6507 100644
+--- a/core/java/android/provider/Settings.java
++++ b/core/java/android/provider/Settings.java
+@@ -11710,6 +11710,11 @@ public final class Settings {
+          */
+         public static final String LOCK_SCREEN_WEATHER_ENABLED = "lockscreen_weather_enabled";
+ 
++        /**
++         * @hide
++         */
++        public static final String UFAM_SECURITY_DOORS_OPEN = "ufam_security_doors_open";
++
+         /**
+          * These entries are considered common between the personal and the managed profile,
+          * since the managed profile doesn't get to change them.
+diff --git a/services/Android.bp b/services/Android.bp
+index f732940f1c4be616956d129cd17160758f2efb27..14c36bdfb8ebeece01494661e3ef88bf15781a49 100644
+--- a/services/Android.bp
++++ b/services/Android.bp
+@@ -181,6 +181,7 @@ java_library {
+         "service-blobstore",
+         "service-jobscheduler",
+         "android.hidl.base-V1.0-java",
++        "services.ufam.security",
+     ],
+ 
+     libs: [
+diff --git a/services/core/Android.bp b/services/core/Android.bp
+index f8d19ec9903dcbad054d4376f58cc9f543851d9a..efcfe2143b645d2c065dc1c5bbb2e1973bc0ef5b 100644
+--- a/services/core/Android.bp
++++ b/services/core/Android.bp
+@@ -186,6 +186,7 @@ java_library_static {
+         "com.android.sysprop.watchdog",
+         "ImmutabilityAnnotation",
+         "securebox",
++        "oemnetd_aidl_interface-java",
+     ],
+     javac_shard_size: 50,
+     javacflags: [
+diff --git a/services/core/java/com/android/server/net/NetworkManagementService.java b/services/core/java/com/android/server/net/NetworkManagementService.java
+index e5ffa7e15f28678c4ff3e0a4433ac5b2cd0d41b0..ee245ed43c1c293f7169f6a4aae53f338dabdf98 100644
+--- a/services/core/java/com/android/server/net/NetworkManagementService.java
++++ b/services/core/java/com/android/server/net/NetworkManagementService.java
+@@ -76,6 +76,7 @@ import android.util.SparseIntArray;
+ 
+ import com.android.internal.annotations.GuardedBy;
+ import com.android.internal.app.IBatteryStats;
++import com.android.internal.net.IOemNetd;
+ import com.android.internal.util.DumpUtils;
+ import com.android.internal.util.HexDump;
+ import com.android.internal.util.Preconditions;
+@@ -147,6 +148,8 @@ public class NetworkManagementService extends INetworkManagementService.Stub {
+ 
+     private INetd mNetdService;
+ 
++    private IOemNetd mOemNetdService;
++
+     private final NetdUnsolicitedEventListener mNetdUnsolicitedEventListener;
+ 
+     private IBatteryStats mBatteryStats;
+@@ -254,10 +257,10 @@ public class NetworkManagementService extends INetworkManagementService.Stub {
+             throws InterruptedException {
+         final NetworkManagementService service =
+                 new NetworkManagementService(context, deps);
+-        if (DBG) Slog.d(TAG, "Creating NetworkManagementService");
+-        if (DBG) Slog.d(TAG, "Connecting native netd service");
++        Slog.d(TAG, "Creating NetworkManagementService");
++        Slog.d(TAG, "Connecting native netd service");
+         service.connectNativeNetdService();
+-        if (DBG) Slog.d(TAG, "Connected");
++        Slog.d(TAG, "Connected");
+         return service;
+     }
+ 
+@@ -425,8 +428,9 @@ public class NetworkManagementService extends INetworkManagementService.Stub {
+     private void connectNativeNetdService() {
+         mNetdService = mDeps.getNetd();
+         try {
++            mOemNetdService = IOemNetd.Stub.asInterface(mNetdService.getOemNetd());
+             mNetdService.registerUnsolicitedEventListener(mNetdUnsolicitedEventListener);
+-            if (DBG) Slog.d(TAG, "Register unsolicited event listener");
++            Slog.d(TAG, "Register unsolicited event listener");
+         } catch (RemoteException | ServiceSpecificException e) {
+             Slog.e(TAG, "Failed to set Netd unsolicited event listener " + e);
+         }
+@@ -871,6 +875,17 @@ public class NetworkManagementService extends INetworkManagementService.Stub {
+         Slog.i(TAG, "Shutting down");
+     }
+ 
++    @Override
++    public void closeAllBut(int[] exceptions) {
++        if (DBG) Log.d(TAG, "closeAllBut()");
++        NetworkStack.checkNetworkStackPermission(mContext);
++        try {
++            mOemNetdService.closeAllBut(exceptions);
++        } catch (RemoteException | ServiceSpecificException e) {
++            Log.e(TAG, "Could not access Netd Service", e);
++        }
++    }
++
+     @Override
+     public boolean getIpForwardingEnabled() throws IllegalStateException{
+         NetworkStack.checkNetworkStackPermission(mContext);
+diff --git a/services/core/java/com/android/server/net/NetworkPolicyManagerService.java b/services/core/java/com/android/server/net/NetworkPolicyManagerService.java
+index b7082690276c9bc2140275031b01594b8f7e1686..8c85284405ed6b218f160eaf8f9f576ad96dbd9c 100644
+--- a/services/core/java/com/android/server/net/NetworkPolicyManagerService.java
++++ b/services/core/java/com/android/server/net/NetworkPolicyManagerService.java
+@@ -5860,6 +5860,16 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
+         }
+     }
+ 
++    public void closeAllBut(int[] exceptions) {
++        try {
++            mNetworkManager.closeAllBut(exceptions);
++        } catch (IllegalArgumentException ile) {
++            Log.wtf(TAG, "Could not call closeAllBut()", ile);
++        } catch (RemoteException re) {
++            Log.wtf(TAG, "Could not call closeAllBut()", re);
++        }
++    }
++
+     @Deprecated
+     private long getTotalBytes(NetworkTemplate template, long start, long end) {
+         // Skip if not ready. NetworkStatsService will block public API calls until it is
+diff --git a/services/java/com/android/server/SystemServer.java b/services/java/com/android/server/SystemServer.java
+index c15f595525b4420a232e0689fb965596501ffe32..96d7ccb06382f36836edebb91e4145d296504fd6 100644
+--- a/services/java/com/android/server/SystemServer.java
++++ b/services/java/com/android/server/SystemServer.java
+@@ -446,6 +446,9 @@ public final class SystemServer implements Dumpable {
+     private static final String UNCRYPT_PACKAGE_FILE = "/cache/recovery/uncrypt_file";
+     private static final String BLOCK_MAP_FILE = "/cache/recovery/block.map";
+ 
++    private static final String UFAM_SECURITY_SERVICE_CLASS =
++            "com.ufam.server.security.UfamSecurityService";
++
+     // maximum number of binder threads used for system_server
+     // will be higher than the system default
+     private static final int sMaxBinderThreads = 31;
+@@ -3191,6 +3194,14 @@ public final class SystemServer implements Dumpable {
+         t.traceEnd();
+ 
+         t.traceEnd(); // startOtherServices
++
++        t.traceBegin("StartUFAMSecurityService");
++        try {
++            mSystemServiceManager.startService(UFAM_SECURITY_SERVICE_CLASS);
++        } catch (Throwable e) {
++            reportWtf("starting UFAMSecurityService", e);
++        }
++        t.traceEnd();
+     }
+ 
+     /**
