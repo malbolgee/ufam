@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">UFAMSecurity</string>
+    <string name="add_doors_screen_title">Add open doors</string>
+
+    <string name="clear_dialog_title">Clear open door list</string>
+    <string name="clear_dialog_description">Are you sure you want to clear the list?</string>
+    <string name="clear_dialog_ok_button">Yes</string>
+    <string name="clear_dialog_cancel_button">Cancel</string>
+
+    <string name="lorem_ipsum_title">Lorem ipsum</string>
+    <string name="lorem_ipsum_description">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Morbi eget lectus non nulla sollicitudin ultricies ullamcorper sit amet arcu. Proin</string>
+    <string name="base_button_placeholder_text">OK</string>
+</resources>
